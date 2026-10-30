@@ -8,3 +8,6 @@ knowledge/indices/*
 todo.md
 report*
 *.pdf
+tailscale_key.txt
+containment_agent
+tests

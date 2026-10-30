@@ -74,6 +74,10 @@ def start_workers() -> tuple[list[threading.Thread], dict[str, threading.Event]]
             "validation-worker",
             lambda: _create_worker("MAPE.workers.validation_worker", "ValidationWorker"),
         ),
+        (
+            "response-worker",
+            lambda: _create_worker("MAPE.workers.response_worker", "ResponseWorker"),
+        ),
     ]
     worker_readiness = {
         name: threading.Event()

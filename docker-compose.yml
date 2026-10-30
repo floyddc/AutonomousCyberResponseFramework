@@ -107,6 +107,9 @@ services:
 
     environment:
       HF_TOKEN: ${HF_TOKEN}
+      AGENT_IP: ${AGENT_IP:-100.67.87.88}
+      AGENT_TOKEN: ${AGENT_TOKEN:-}
+      APPROVAL_TOKEN: ${APPROVAL_TOKEN:-}
       PYTHONPATH: /app:/app/RAG:/app/MAPE:/app/knowledge:/app/postgres:/app/MQTT
       MQTT_BROKERS: "emqx-1:1883,emqx-2:1883,emqx-3:1883"
 

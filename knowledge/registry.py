@@ -1,6 +1,7 @@
 import json
 import uuid
 import config
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from postgres.db import cursor as _cursor
 from postgres.db import transaction
@@ -225,6 +226,188 @@ class IncidentRegistry:
                     )
 
             return correlation_id
+
+    def get_pending_approval(self, incident_id: int) -> Dict[str, Any]:
+        incident = self.get_incident(incident_id)
+        if incident is None:
+            raise LookupError(f"Incident {incident_id} not found")
+        if incident.get("status") != STATUS_AWAITING_HUMAN_APPROVAL:
+            raise ValueError("Incident is not awaiting human approval")
+
+        with _cursor(config.POSTGRES_OPERATIONAL_DB) as cur:
+            cur.execute(
+                """
+                SELECT payload
+                FROM event_outbox
+                WHERE incident_id = %s
+                  AND event_type = %s
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (incident_id, topics.HUMAN_APPROVAL_REQUIRED),
+            )
+            row = cur.fetchone()
+        if row is None:
+            raise RuntimeError("Pending approval event was not found")
+
+        event = row["payload"]
+        if isinstance(event, str):
+            event = json.loads(event)
+        payload = event.get("payload") if isinstance(event, dict) else None
+        actions = payload.get("approved_actions") if isinstance(payload, dict) else None
+        if not isinstance(actions, list) or not actions:
+            raise RuntimeError("Pending approval event has no approved actions")
+        return {
+            "incident_id": incident_id,
+            "severity": payload.get("severity"),
+            "approved_actions": actions,
+        }
+
+    def approve_pending_actions(
+        self,
+        incident_id: int,
+        approved_by: str,
+        action_indexes: List[int],
+    ) -> None:
+        if not isinstance(approved_by, str) or not approved_by.strip():
+            raise ValueError("approved_by must be a non-empty string")
+        if (
+            not isinstance(action_indexes, list)
+            or not action_indexes
+            or any(
+                isinstance(index, bool) or not isinstance(index, int) or index < 0
+                for index in action_indexes
+            )
+            or len(action_indexes) != len(set(action_indexes))
+        ):
+            raise ValueError("action_indexes must contain unique non-negative integers")
+
+        with transaction(config.POSTGRES_OPERATIONAL_DB) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT status FROM incidents WHERE id = %s FOR UPDATE",
+                    (incident_id,),
+                )
+                incident = cur.fetchone()
+                if incident is None:
+                    raise LookupError(f"Incident {incident_id} not found")
+                if incident[0] != STATUS_AWAITING_HUMAN_APPROVAL:
+                    raise ValueError("Incident is not awaiting human approval")
+
+                cur.execute(
+                    """
+                    SELECT payload, correlation_id, event_id
+                    FROM event_outbox
+                    WHERE incident_id = %s
+                      AND event_type = %s
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 1
+                    """,
+                    (incident_id, topics.HUMAN_APPROVAL_REQUIRED),
+                )
+                pending = cur.fetchone()
+                if pending is None:
+                    raise RuntimeError("Pending approval event was not found")
+
+                source_event = pending[0]
+                if isinstance(source_event, str):
+                    source_event = json.loads(source_event)
+                if not isinstance(source_event, dict):
+                    raise RuntimeError("Pending approval event is malformed")
+
+                source_payload = source_event.get("payload")
+                actions = (
+                    source_payload.get("approved_actions")
+                    if isinstance(source_payload, dict)
+                    else None
+                )
+                if not isinstance(actions, list) or not actions:
+                    raise RuntimeError("Pending approval event has no approved actions")
+                if any(index >= len(actions) for index in action_indexes):
+                    raise ValueError("action_indexes contains an unknown action")
+
+                approved_actions = [
+                    {
+                        **actions[index],
+                        "requires_human_approval": False,
+                    }
+                    for index in action_indexes
+                    if isinstance(actions[index], dict)
+                ]
+                if len(approved_actions) != len(action_indexes):
+                    raise RuntimeError("Pending approval event contains malformed actions")
+                approval = {
+                    "approved_by": approved_by.strip(),
+                    "approved_at": datetime.now(timezone.utc).isoformat(),
+                }
+                event_id = str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        f"human-approval:{incident_id}:{pending[2]}",
+                    )
+                )
+
+                cur.execute(
+                    """
+                    UPDATE incidents
+                    SET status = %s, updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (STATUS_VALIDATED, incident_id),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO audit_log (incident_id, agent, action, details)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        incident_id,
+                        "incident_registry",
+                        "phase_transition",
+                        json.dumps(
+                            {
+                                "from": STATUS_AWAITING_HUMAN_APPROVAL,
+                                "to": STATUS_VALIDATED,
+                                **approval,
+                            }
+                        ),
+                    ),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO audit_log (incident_id, agent, action, details)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        incident_id,
+                        "incident_registry",
+                        "human_approval_granted",
+                        json.dumps(
+                            {
+                                **approval,
+                                "approved_actions": approved_actions,
+                            }
+                        ),
+                    ),
+                )
+                self._insert_outbox_event(
+                    cur,
+                    incident_id=incident_id,
+                    event_type=topics.ACTION_VALIDATED,
+                    correlation_id=str(pending[1]),
+                    producer="incident_registry",
+                    topic=topics.ACTION_VALIDATED,
+                    payload={
+                        "approved_actions": approved_actions,
+                        "approval": approval,
+                        "original_event_id": (
+                            source_payload.get("original_event_id")
+                            if isinstance(source_payload, dict)
+                            else None
+                        ),
+                    },
+                    event_id=event_id,
+                )
 
     def _insert_outbox_event(
         self,
