@@ -83,7 +83,7 @@ Python service that exposes only preset operations (in this moment only `block_i
   User=root
   WorkingDirectory=/opt/containment-agent
   EnvironmentFile=/etc/containment-agent.env
-  ExecStart=/opt/containment-agent/.venv/bin/uvicorn agent:app --app-dir /opt/containment-agent --host ${AGENT_BIND_IP} --port 8787
+  ExecStart=/opt/containment-agent/.venv/bin/uvicorn agent:app --app-dir /opt/containment-agent --host 100.67.87.88 --port 8787
   Restart=on-failure
   NoNewPrivileges=true
   CapabilityBoundingSet=CAP_NET_ADMIN
@@ -111,10 +111,7 @@ Python service that exposes only preset operations (in this moment only `block_i
     ```
     The expected reply is:
     ```json
-    {
-    "status": "ok",
-    "mode": "dry-run"
-    }
+    {"status":"ok","mode":"enforcing","actions":["block_ip"]}
     ```
 
 ## Overall execution

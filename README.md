@@ -57,8 +57,13 @@ No other installations are required.
 git clone https://github.com/floyddc/AutonomousCyberResponseFramework.git
 cd AutonomousCyberResponseFramework
 ```
+Then populate the `.env` file and:
 ```bash
-echo "<HF_TOKEN=xxxxxx>" > .env
+mv setup_VastAi.sh /root
+cd 
+chmod +x setup_VastAi.sh
+./setup_VastAi.sh
+cd AutonomousCyberResponseFramework
 ```
 ```bash
 docker compose build

@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 
-# Prima clona la repo del progetto, apri /python/config.py e cambia eventualmente i modelli Ollama. Sposta poi questo script fuori dalla cartella, controlla se Ollama
-# è installato ed esegui lo script.
-
 set -Eeuo pipefail
 
 # ============================================================
 # Configurazione
 # ============================================================
 
-PROJECT_DIR="./Agentic-AI---Autonomous-Cyber-Response-framework"
+PROJECT_DIR="./AutonomousCyberResponseFramework"
 CONFIG_FILE="$PROJECT_DIR/python/config.py"
 
 # ============================================================
