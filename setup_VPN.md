@@ -8,20 +8,19 @@
 
 
 ## VPN Config: Linux VM
-_Se la VM è persistente, è sufficiente eseguire questi passaggi una sola volta._
-- Installa e avvia Tailscale:
+- Install and run Tailscale:
     ```ps
     curl -fsSL https://tailscale.com/install.sh | sh
     sudo tailscale up
     ```
-- Apri il link di autenticazione che compare nel terminale e associa la VM alla rete privata Tailscale. 
-- Genera una auth key su https://console.tailscale.com/admin/machines da `Settings/Keys` e annotala.
-- Verifica la connessione:
+- Open the auth link and enable the VPN.
+- Generate an auth key (https://console.tailscale.com/admin/machines) (`Settings/Keys`) and take note of it.
+- Check connection:
     ```ps
     tailscale status
     tailscale ip -4
     ```
-  e annota l'indirizzo 100.x.y.z che è stato assegnato
+  and take note of the IP address (100.x.y.z).
   
 ## VPN Config: Vast.ai VM
 _To execute every time you build a new VM._
