@@ -116,24 +116,18 @@ Python service that exposes only preset operations (in this moment only `block_i
 ## Overall execution
 - Build and run the framework, then:
   ```powershell
-  curl.exe -X POST http://localhost:8000/alerts `
-    -H "Content-Type: application/json" `
-    --data-binary "@knowledge/raw_data/edr_alerts/test_alert3.json"
+  curl -X POST http://localhost:8000/alerts -H "Content-Type: application/json" --data-binary "@knowledge/raw_data/edr_alerts/test_alert3.json"
   ```
 
 - If the incident is awaiting approval, inspect the validated choices:
   ```powershell
-  curl.exe http://localhost:8000/incidents/<INCIDENT_ID>/approval `
-    -H "Authorization: Bearer <APPROVAL_TOKEN>"
+  curl http://localhost:8000/incidents/<INCIDENT_ID>/approval -H "Authorization: Bearer <APPROVAL_TOKEN>"
   ```
 
 Approve **only the index of the `block_ip` action** from that response:
 
 ```powershell
-curl.exe -X POST http://localhost:8000/incidents/<INCIDENT_ID>/approve `
-  -H "Authorization: Bearer <APPROVAL_TOKEN>" `
-  -H "Content-Type: application/json" `
-  -d "{\"approved_by\":\"diego\",\"action_indexes\":[<BLOCK_IP_ACTION_INDEX>]}"
+curl -X POST http://localhost:8000/incidents/<INCIDENT_ID>/approve -H "Authorization: Bearer <APPROVAL_TOKEN>" -H "Content-Type: application/json" -d "{\"approved_by\":\"diego\",\"action_indexes\":[<BLOCK_IP_ACTION_INDEX>]}"
 ```
 
 The approval endpoint selects actions from the server-stored validated plan; it does not accept a replacement target or modified action. The IP will be blocked on the Linux VM for one hour. Check `GET /incidents/<INCIDENT_ID>` until it reaches `responded` or `failed`, and inspect the agent's systemd journal and `sudo nft list table inet acr` to verify the result.

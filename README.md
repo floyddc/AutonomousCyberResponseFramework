@@ -82,12 +82,12 @@ docker exec -it python-app python -m knowledge.fetch_datasets --mitre --telemetr
 
 ## DB seeding
 ```powershell
-docker exec -it python-app python -m postgres.seed_knowledge_base`
+docker exec -it python-app python -m postgres.seed_knowledge_base
 ```
 
 ## Vector index building
 The index is stored in `knowledge/indices/`
-- First run:
+- **First run:**
   ```powershell
   docker compose run --rm --no-deps python python -m RAG.build_index --reset
   ```
@@ -98,26 +98,29 @@ The index is stored in `knowledge/indices/`
 
 
 ## Logs management
-- Clean all:
+- **Clean all:**
   ```powershell
   docker exec -it python-app python -m MAPE.logging_agent --clear; truncate -s 0 "$(docker inspect --format='{{.LogPath}}' python-app)"
   ```
-- Print logs of the last run:
+- **Print logs of the last run:**
   ```powershell
   docker exec -it python-app python -m MAPE.logging_agent --tail 14; docker logs python-app
   ```
 
 ## Run the MAPE-K workflow
-- Windows:
+```powershell
+curl -X POST http://localhost:8000/alerts -H "Content-Type: application/json" --data-binary "@<ALERT_PATH>"
+```
+
+- If the incident is awaiting approval, inspect the validated choices:
   ```powershell
-  curl.exe -X POST http://localhost:8000/alerts -H "Content-Type: application/json" --data-binary "@<ALERT_PATH>"
-  ```
-- Linux/MacOS:
-  ```powershell
-  curl -X POST http://localhost:8000/alerts -H "Content-Type: application/json" --data-binary "@<ALERT_PATH>"
+  curl http://localhost:8000/incidents/<INCIDENT_ID>/approval -H "Authorization: Bearer <APPROVAL_TOKEN>"
   ```
 
-
+- Approve the index of an from the response (_only `block_ip` is supported_):
+  ```powershell
+  curl -X POST http://localhost:8000/incidents/<INCIDENT_ID>/approve -H "Authorization: Bearer <APPROVAL_TOKEN>" -H "Content-Type: application/json" -d "{\"approved_by\":\"diego\",\"action_indexes\":[<BLOCK_IP_ACTION_INDEX>]}"
+  ```
 
 ## Grafana - to review
 - `localhost:3000`
