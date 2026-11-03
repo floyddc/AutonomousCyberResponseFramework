@@ -1,5 +1,0 @@
-Il canale di comando è in chiaro su HTTP: dentro Tailscale è cifrato, ma un token statico condiviso è debole. Servirebbero credenziali per ogni agente e rotazione.
-L'agente va in pull o con connessione in uscita: gli agenti reali di solito contattano il server, invece di aprire una porta in ascolto sull'endpoint.
-Il blocco copre solo il traffico in uscita su una VM Linux: per un endpoint reale servirebbero anche ingresso, isolamento dell'host, kill di processo e quarantena del file.
-Manca la resilienza: serve la gestione di agente offline, retry, rollback, audit firmato e un identificativo dell'endpoint. Ora il framework riceve l'IP dell'agente, ma non c'è un inventario degli asset.
-I falsi positivi hanno un costo alto: il rischio vero è bloccare un IP legittimo, come un CDN o un servizio interno. Servono allowlist e valutazione dell'impatto, che in parte hai già con gli IP protetti.

@@ -40,6 +40,12 @@ _To execute every time you build a new VM._
     ```ps
     tailscale up --auth-key="<TSKEY>" --hostname=acr-vast
     ```
+- Update the `.env` file adding:
+    ```
+    AGENT_IP=100.82.104.108
+    AGENT_TOKEN=<AGENT_TOKEN>
+    APPROVAL_TOKEN=<APPROVAL_TOKEN>
+    ```
 
 ## Agent installation on Linux
 Python service that exposes only preset operations (in this moment only `block_ip` is supported), not a remote shell.
@@ -60,9 +66,9 @@ Python service that exposes only preset operations (in this moment only `block_i
   sudo nano /etc/containment-agent.env
   ```
   ```text
-  AGENT_TOKEN=<agent_token>
-  AGENT_BIND_IP=100.67.87.88
-  ACR_PROTECTED_IPS=<framework-tailscale-ip>,100.67.87.88
+  AGENT_TOKEN=<AGENT_TOKEN>
+  AGENT_BIND_IP=100.82.104.108
+  ACR_PROTECTED_IPS=<FRAMEWORK_TAILSCALE_IP>,100.82.104.108
   ```
   ```bash
   sudo chmod 0600 /etc/containment-agent.env
@@ -82,7 +88,7 @@ Python service that exposes only preset operations (in this moment only `block_i
   User=root
   WorkingDirectory=/opt/containment-agent
   EnvironmentFile=/etc/containment-agent.env
-  ExecStart=/opt/containment-agent/.venv/bin/uvicorn agent:app --app-dir /opt/containment-agent --host 100.67.87.88 --port 8787
+  ExecStart=/opt/containment-agent/.venv/bin/uvicorn agent:app --app-dir /opt/containment-agent --host 100.82.104.108 --port 8787
   Restart=on-failure
   NoNewPrivileges=true
   CapabilityBoundingSet=CAP_NET_ADMIN
@@ -104,9 +110,9 @@ Python service that exposes only preset operations (in this moment only `block_i
 
 
 ## Connectivity check: Vast.ai VM
-- Let's suppose the Linux VM IP address is 100.67.87.88:
+- Let's suppose the Linux VM IP address is 100.82.104.108:
     ```ps
-    curl --connect-timeout 5 http://100.67.87.88:8787/health
+    curl --connect-timeout 5 http://100.82.104.108:8787/health
     ```
     The expected reply is:
     ```json
