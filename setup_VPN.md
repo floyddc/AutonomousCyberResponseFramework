@@ -7,7 +7,9 @@
 - [Overall execution](#overall-execution)
 
 
-## Linux VM endpoint - Preliminar steps
+## _Linux VM endpoint_ - Preliminar steps
+_To execute at the first usage._
+
 ### VPN config
 - Install and run Tailscale:
     ```ps
@@ -34,7 +36,7 @@
   ```bash
   sudo systemctl status ssh
   ```
-- Now let's setup the firewall:
+- Check the current firewall rules before changing them:
   ```ps
   sudo apt install ufw
   sudo systemctl enable ssh
@@ -45,13 +47,11 @@
   sudo ufw reload
   sudo ufw status
   ```
-- Check if it's listening on port 22: 
-  ```ps
-  sudo ss -tlnp | grep :22
-  ```
+
+  SSH currently listens on all interfaces, and the existing UFW rules allow TCP/22 from anywhere over both IPv4 and IPv6.
 
 
-## Vast.ai VM - Preliminar steps
+## _Vast.ai VM_ - Preliminar steps
 _To execute every time you build a new Vast.ai VM._
 
 ### VPN config
@@ -78,7 +78,7 @@ _To execute every time you build a new Vast.ai VM._
     APPROVAL_TOKEN=<APPROVAL_TOKEN>
     ```
 
-## Linux VM endpoint - Agent installation
+## _Linux VM endpoint_ - Agent installation
 Python service that exposes only preset operations (in this moment only `block_ip` is supported), not a remote shell.
 
 - Move on the Linux VM `agent.py`, `firewall.py` and `requirements.txt`, then:
@@ -108,7 +108,7 @@ Python service that exposes only preset operations (in this moment only `block_i
   ```
 
 
-## Vast.ai VM - Final steps
+## _Vast.ai VM_ - Final steps
 - Check the HTTP connectivity:
   ```ps
   curl --connect-timeout 5 http://100.82.104.108:8787/health
@@ -165,6 +165,40 @@ Python service that exposes only preset operations (in this moment only `block_i
   ```
 
 
+## _Tailscale admin panel_ - Restrict access
+- In the admin console (https://console.tailscale.com/admin/acls/file), add a grant to the existing policy for the framework node to reach only SSH and the containment API on this endpoint:
+    ```json
+    "grants": [
+      {
+        "src": ["<FRAMEWORK_TAILSCALE_IP>/32"],
+        "dst": ["100.82.104.108"],
+        "ip": ["tcp:22", "tcp:8787"]
+      }
+    ]
+    ```
+
+## _Linux VM endpoint_ - Restrict the UFW rules
+```bash
+FRAMEWORK_TAILSCALE_IP="<FRAMEWORK_TAILSCALE_IP>"
+AGENT_TAILSCALE_IP="100.82.104.108"
+
+sudo ufw allow in on tailscale0 proto tcp from "$FRAMEWORK_TAILSCALE_IP" to "$AGENT_TAILSCALE_IP" port 22
+sudo ufw allow in on tailscale0 proto tcp from "$FRAMEWORK_TAILSCALE_IP" to "$AGENT_TAILSCALE_IP" port 8787
+sudo ufw status numbered
+```
+- Inspect:
+  ```bash
+  sudo ufw status numbered
+  ```
+- And delete only the old `22/tcp ALLOW IN Anywhere` and `22/tcp (v6) ALLOW IN Anywhere (v6)` entries, replacing the `N` (rule number):
+  ```bash
+  sudo ufw delete N
+  sudo ufw status numbered
+  ```
+- In the end, to apply changes to the active firewall:
+  ```bash
+  sudo ufw reload
+  ```
 
 
 ## Overall execution
