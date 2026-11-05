@@ -66,7 +66,7 @@ ssh \
     -o StrictHostKeyChecking=yes \
     -o ConnectTimeout=10 \
     "$AGENT_SSH_TARGET" \
-    'sudo -n sh -c "umask 077; cat > /etc/containment-agent.credential.new && chown root:root /etc/containment-agent.credential.new && chmod 0600 /etc/containment-agent.credential.new && mv -f /etc/containment-agent.credential.new /etc/containment-agent.credential"' \
+    'sudo -n /usr/local/sbin/acr-install-agent-credential' \
     <"$CREDENTIAL_FILE"
 
 echo "Containment-agent credential provisioned; its value was not displayed."
