@@ -7,27 +7,54 @@
 - [Overall execution](#overall-execution)
 
 
-## VPN Config: Linux VM
+## Linux VM endpoint - Preliminar steps
+### VPN config
 - Install and run Tailscale:
     ```ps
     curl -fsSL https://tailscale.com/install.sh | sh
     sudo tailscale up
     ```
 - Open the auth link and enable the VPN.
-- Generate an auth key (https://console.tailscale.com/admin/machines) (`Settings/Keys`) and take note of it.
+- Generate an auth key (`TS_KEY`) via https://console.tailscale.com/admin/machines (`Settings/Keys`) and take note of it.
 - Check connection:
     ```ps
     tailscale status
     tailscale ip -4
     ```
-  and take note of the IP address (100.x.y.z).
-  
-## VPN Config: Vast.ai VM
-_To execute every time you build a new VM._
-- Check /dev/net/tun on the VM to use Tailscale in traditional mode:
-    ```ps
-    ls -l /dev/net/tun
-    ```
+  and take note of the IP address (100.x.y.z) (in my case, **100.82.104.108**).
+
+### SSH setup
+- Install OpenSSH-Server and run it:
+  ```bash
+  sudo apt install openssh-server -y
+  sudo systemctl enable sshd
+  sudo systemctl start sshd
+  ```
+- Check if it's active:
+  ```bash
+  sudo systemctl status ssh
+  ```
+- Now let's setup the firewall:
+  ```ps
+  sudo apt install ufw
+  sudo systemctl enable ssh
+  sudo systemctl start ssh
+  sudo ufw enable
+  sudo ufw start
+  sudo ufw allow 22/tcp
+  sudo ufw reload
+  sudo ufw status
+  ```
+- Check if it's listening on port 22: 
+  ```ps
+  sudo ss -tlnp | grep :22
+  ```
+
+
+## Vast.ai VM - Preliminar steps
+_To execute every time you build a new Vast.ai VM._
+
+### VPN config
 - Install and run Tailscale:
     ```ps
     curl -fsSL https://tailscale.com/install.sh | sh
@@ -38,19 +65,23 @@ _To execute every time you build a new VM._
     ```
 - Authenticate the node using the auth key previously generated:
     ```ps
-    tailscale up --auth-key="<TSKEY>" --hostname=acr-vast
+    tailscale up --auth-key="<TS_KEY>" --hostname=acr-vast
     ```
-- Update the `.env` file adding:
+- Check if the service is up and take note of the IP address (`FRAMEWORK_TAILSCALE_IP`):
+    ```ps
+    tailscale status
+    tailscale ip -4
+    ```
+- Update the `.env` file adding the agent IP address and a custom approval token:
     ```
     AGENT_IP=100.82.104.108
-    AGENT_TOKEN=<AGENT_TOKEN>
     APPROVAL_TOKEN=<APPROVAL_TOKEN>
     ```
 
-## Agent installation on Linux
+## Linux VM endpoint - Agent installation
 Python service that exposes only preset operations (in this moment only `block_ip` is supported), not a remote shell.
 
-- Move on the Linux VM `agent.py`, `firewall.py`, `requirements.txt` and `.env`, then:
+- Move on the Linux VM `agent.py`, `firewall.py` and `requirements.txt`, then:
   ```bash
   sudo apt update
   sudo apt install -y nftables python3-venv python3-pip
@@ -65,16 +96,41 @@ Python service that exposes only preset operations (in this moment only `block_i
   ```bash
   sudo nano /etc/containment-agent.env
   ```
+  Type: 
   ```text
-  AGENT_TOKEN=<AGENT_TOKEN>
+  AGENT_CREDENTIAL_FILE=/etc/containment-agent.credential
   AGENT_BIND_IP=100.82.104.108
   ACR_PROTECTED_IPS=<FRAMEWORK_TAILSCALE_IP>,100.82.104.108
   ```
+  Then close and:
   ```bash
   sudo chmod 0600 /etc/containment-agent.env
   ```
 
-> Run the API as a root-owned systemd service because nftables requires `CAP_NET_ADMIN`. Keep it bound to the Tailscale address; do not expose port 8787 to the public network.
+
+## Vast.ai VM - Final steps
+- Check the HTTP connectivity:
+  ```ps
+  curl --connect-timeout 5 http://100.82.104.108:8787/health
+  ```
+  The expected reply is:
+  ```json
+  {"status":"ok","mode":"enforcing","actions":["block_ip"]}
+  ```
+- Check the SSH connection:
+  ```ps
+  ssh <LINUX_VM_USER>@100.82.104.108
+  ```
+- Generate a unique 256-bit SSH credential and install it on the framework host and agent:
+  ```bash
+  AGENT_IP=100.82.104.108 \
+  AGENT_SSH_TARGET=<LINUX_VM_USER>@100.82.104.108 \
+    ./scripts/provision_containment_agent_credential.sh
+  ```
+  The credential is stored locally under `.agent-credentials/` with restrictive permissions and on the agent at `/etc/containment-agent.credential` with owner `root` and mode `0600`. The script reuses the existing credential on subsequent runs. 
+  
+  > **Restart the framework after provisioning so Docker Compose mounts the credential directory.**
+
 
 - Create `/etc/systemd/system/containment-agent.service`:
   ```ini
@@ -109,15 +165,7 @@ Python service that exposes only preset operations (in this moment only `block_i
   ```
 
 
-## Connectivity check: Vast.ai VM
-- Let's suppose the Linux VM IP address is 100.82.104.108:
-    ```ps
-    curl --connect-timeout 5 http://100.82.104.108:8787/health
-    ```
-    The expected reply is:
-    ```json
-    {"status":"ok","mode":"enforcing","actions":["block_ip"]}
-    ```
+
 
 ## Overall execution
 - Build and run the framework, then:
@@ -130,12 +178,9 @@ Python service that exposes only preset operations (in this moment only `block_i
   curl http://localhost:8000/incidents/<INCIDENT_ID>/approval -H "Authorization: Bearer <APPROVAL_TOKEN>"
   ```
 
-Approve **only the index of the `block_ip` action** from that response:
+   - Approve **only the index of the `block_ip` action** from that response:
 
-```powershell
-curl -X POST http://localhost:8000/incidents/<INCIDENT_ID>/approve -H "Authorization: Bearer <APPROVAL_TOKEN>" -H "Content-Type: application/json" -d "{\"approved_by\":\"diego\",\"action_indexes\":[<BLOCK_IP_ACTION_INDEX>]}"
-```
-
-The approval endpoint selects actions from the server-stored validated plan; it does not accept a replacement target or modified action. The IP will be blocked on the Linux VM for one hour. Check `GET /incidents/<INCIDENT_ID>` until it reaches `responded` or `failed`, and inspect the agent's systemd journal and `sudo nft list table inet acr` to verify the result.
-
-Before approving, verify that the IP is the intended test IOC and that this VM is an isolated lab host. Do not select `isolate_host` or any other action for this agent; it intentionally rejects actions it does not implement.
+      ```powershell
+      curl -X POST http://localhost:8000/incidents/<INCIDENT_ID>/approve -H "Authorization: Bearer <APPROVAL_TOKEN>" -H "Content-Type: application/json" -d "{\"approved_by\":\"diego\",\"action_indexes\":[<BLOCK_IP_ACTION_INDEX>]}"
+      ```
+      The IP will be blocked on the Linux VM for one hour. Check `GET /incidents/<INCIDENT_ID>` until it reaches `responded` or `failed`, and inspect the agent's systemd journal and `sudo nft list table inet acr` to verify the result.

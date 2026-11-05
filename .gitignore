@@ -5,6 +5,7 @@ knowledge/base/*
 knowledge/indices/*
 !knowledge/indices/.gitkeep
 .env
+.agent-credentials/
 todo.md
 report*
 *.pdf

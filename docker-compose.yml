@@ -108,7 +108,7 @@ services:
     environment:
       HF_TOKEN: ${HF_TOKEN}
       AGENT_IP: ${AGENT_IP:-100.82.104.108}
-      AGENT_TOKEN: ${AGENT_TOKEN:-}
+      AGENT_CREDENTIAL_FILE: /run/acr-agent-credentials/credential
       APPROVAL_TOKEN: ${APPROVAL_TOKEN:-}
       PYTHONPATH: /app:/app/RAG:/app/MAPE:/app/knowledge:/app/postgres:/app/MQTT
       MQTT_BROKERS: "emqx-1:1883,emqx-2:1883,emqx-3:1883"
@@ -120,6 +120,7 @@ services:
       - "host.docker.internal:host-gateway"
 
     volumes:
+      - ./.agent-credentials/framework:/run/acr-agent-credentials:ro
       - hf_cache:/root/.cache/huggingface
       - ./python:/app
       - ./RAG:/app/RAG
