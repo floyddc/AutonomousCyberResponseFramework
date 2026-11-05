@@ -25,7 +25,7 @@ CACHE_DIR = "/root/.cache/huggingface"
 # PIPELINE & OLLAMA SETUP ----------------------------------------------------------------------------------------------------------------------------------------------------------     
 WARMUP_ON = True                        
 OLLAMA_HOST = "http://host.docker.internal:11434"
-OLLAMA_TIMEOUT_SECONDS = 90             
+OLLAMA_TIMEOUT_SECONDS = 120             
 API_HOST = "0.0.0.0"
 API_PORT = 8000
 MAX_REQUEST_BYTES = 1_048_576

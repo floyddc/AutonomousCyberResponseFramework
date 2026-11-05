@@ -1,13 +1,18 @@
 # SETUP VPN Vast.ai VM <-> Local Endpoint VM
 
-- [VPN Config: Linux VM](#vpn-config-linux-vm)
-- [VPN Config: Vast.ai VM](#vpn-config-vastai-vm)
-- [Agent installation on Linux](#agent-installation-on-linux)
-- [Connectivity check: Vast.ai VM](#connectivity-check-vastai-vm)
+- [Linux VM endpoint - Preliminary steps](#linux-vm-endpoint---preliminary-steps)
+  - [VPN config](#vpn-config)
+  - [SSH setup](#ssh-setup)
+- [Vast.ai VM - Preliminary step](#vastai-vm---preliminary-steps)
+  - [VPN config](#vpn-config-1)
+- [Linux VM endpoint - Agent installation](#linux-vm-endpoint---agent-installation)
+- [Vast.ai VM - Connectivity & SSH credentials](#vastai-vm---connectivity--ssh-credentials)
+- [Tailscale admin panel - Restrict access](#tailscale-admin-panel---restrict-access)
+- [Linux VM endpoint - Restrict the UFW rules](#linux-vm-endpoint---restrict-the-ufw-rules)
 - [Overall execution](#overall-execution)
 
 
-## _Linux VM endpoint_ - Preliminar steps
+## _Linux VM endpoint_ - Preliminary steps
 _To execute at the first usage._
 
 ### VPN config
@@ -51,7 +56,7 @@ _To execute at the first usage._
   SSH currently listens on all interfaces, and the existing UFW rules allow TCP/22 from anywhere over both IPv4 and IPv6.
 
 
-## _Vast.ai VM_ - Preliminar steps
+## _Vast.ai VM_ - Preliminary steps
 _To execute every time you build a new Vast.ai VM._
 
 ### VPN config
@@ -161,7 +166,7 @@ Python service that exposes only preset operations (in this moment only `block_i
   ```
 
 
-## _Vast.ai VM_ - Final steps
+## _Vast.ai VM_ - Connectivity & SSH credentials
 - Check the HTTP connectivity:
   ```ps
   curl --connect-timeout 5 http://100.82.104.108:8787/health
@@ -205,14 +210,15 @@ Python service that exposes only preset operations (in this moment only `block_i
     ```
 
 ## _Linux VM endpoint_ - Restrict the UFW rules
-```bash
-FRAMEWORK_TAILSCALE_IP="<FRAMEWORK_TAILSCALE_IP>"
-AGENT_TAILSCALE_IP="100.82.104.108"
+- Allow TCP connections from the framework:
+  ```bash
+  FRAMEWORK_TAILSCALE_IP="<FRAMEWORK_TAILSCALE_IP>"
+  AGENT_TAILSCALE_IP="100.82.104.108"
 
-sudo ufw allow in on tailscale0 proto tcp from "$FRAMEWORK_TAILSCALE_IP" to "$AGENT_TAILSCALE_IP" port 22
-sudo ufw allow in on tailscale0 proto tcp from "$FRAMEWORK_TAILSCALE_IP" to "$AGENT_TAILSCALE_IP" port 8787
-sudo ufw status numbered
-```
+  sudo ufw allow in on tailscale0 proto tcp from "$FRAMEWORK_TAILSCALE_IP" to "$AGENT_TAILSCALE_IP" port 22
+  sudo ufw allow in on tailscale0 proto tcp from "$FRAMEWORK_TAILSCALE_IP" to "$AGENT_TAILSCALE_IP" port 8787
+  sudo ufw status numbered
+  ```
 - Inspect:
   ```bash
   sudo ufw status numbered

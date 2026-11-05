@@ -6,7 +6,7 @@ set -Eeuo pipefail
 # Configurazione
 # ============================================================
 
-PROJECT_DIR="./AutonomousCyberResponseFramework"
+PROJECT_DIR="$HOME/AutonomousCyberResponseFramework"
 CONFIG_FILE="$PROJECT_DIR/python/config.py"
 
 # ============================================================
