@@ -29,7 +29,6 @@ OLLAMA_TIMEOUT_SECONDS = 120
 API_HOST = "0.0.0.0"
 API_PORT = 8000
 MAX_REQUEST_BYTES = 1_048_576
-AGENT_IP = os.environ.get("AGENT_IP", "100.82.104.108")
 
 # RERANKER & EMBEDDER (CPU MODELS) ----------------------------------------------------------------------------------------------------------------------------------------------------------     
 CHUNK_SIZE = 200                

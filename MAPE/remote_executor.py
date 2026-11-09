@@ -1,36 +1,44 @@
-import os
-from pathlib import Path
-import requests
+import time
+from typing import Any, Dict
+from knowledge.registry import IncidentRegistry
 
 
 class RemoteExecutor:
-    def __init__(self, agent_ip: str):
-        if not isinstance(agent_ip, str) or not agent_ip.strip():
-            raise ValueError("agent_ip must be a non-empty string")
-        self.agent_url = f"http://{agent_ip.strip()}:8787"
-        self.credential_file = Path(
-            os.environ.get(
-                "AGENT_CREDENTIAL_FILE",
-                "/run/acr-agent-credentials/credential",
+    def __init__(
+        self,
+        registry: IncidentRegistry,
+        *,
+        timeout_seconds: float = 45.0,
+        poll_interval_seconds: float = 1.0,
+    ):
+        self.registry = registry
+        self.timeout_seconds = timeout_seconds
+        self.poll_interval_seconds = poll_interval_seconds
+
+    def execute(self, incident_id: int, action: Dict[str, Any]) -> dict:
+        command_id = self.registry.queue_containment_command(incident_id, action)
+        deadline = time.monotonic() + self.timeout_seconds
+
+        while time.monotonic() < deadline:
+            command = self.registry.get_containment_command(command_id)
+            if command is None:
+                raise RuntimeError(f"Containment command {command_id} disappeared")
+            if command["status"] == "completed":
+                result = command.get("result")
+                if not isinstance(result, dict):
+                    raise RuntimeError("Containment agent returned an invalid result")
+                return result
+            if command["status"] == "timed_out":
+                raise TimeoutError(f"Containment command {command_id} timed out")
+            time.sleep(
+                min(
+                    self.poll_interval_seconds,
+                    max(0.0, deadline - time.monotonic()),
+                )
             )
-        )
 
-    def execute(self, action: dict) -> dict:
-        try:
-            credential = self.credential_file.read_text(encoding="ascii").strip()
-        except OSError as exc:
-            raise RuntimeError("Unable to read the containment-agent credential") from exc
-        if not credential:
-            raise RuntimeError("The containment-agent credential is empty")
-
-        response = requests.post(
-            f"{self.agent_url}/v1/actions",
-            headers={"Authorization": f"Bearer {credential}"},
-            json=action,
-            timeout=10.0,
+        self.registry.timeout_containment_command(command_id)
+        raise TimeoutError(
+            f"Containment agent did not complete command {command_id} "
+            f"within {self.timeout_seconds:g} seconds"
         )
-        response.raise_for_status()
-        result = response.json()
-        if not isinstance(result, dict):
-            raise ValueError("Containment agent returned a non-object response")
-        return result

@@ -55,7 +55,7 @@ curl -fsSL https://ollama.com/install.sh | sh
     git clone https://github.com/floyddc/AutonomousCyberResponseFramework.git
     cd AutonomousCyberResponseFramework
     echo "HF_TOKEN=<HF_TOKEN>
-    AGENT_IP=<AGENT_IP>  
+    FRAMEWORK_BIND_IP=<FRAMEWORK_TAILSCALE_IP>
     APPROVAL_TOKEN=approval-test" > .env
     ```
 - Make the script executable:

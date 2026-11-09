@@ -1,18 +1,18 @@
-# SETUP VPN Vast.ai VM <-> Local Endpoint VM
+# SETUP VPN Framework Host <-> Endpoint VM
 
-- [Linux VM endpoint - Preliminary steps](#linux-vm-endpoint---preliminary-steps)
+- [Endpoint VM - Preliminary steps](#linux-vm-endpoint---preliminary-steps)
   - [VPN config](#vpn-config)
   - [SSH setup](#ssh-setup)
-- [Vast.ai VM - Preliminary step](#vastai-vm---preliminary-steps)
+- [Framework Host - Preliminary step](#vastai-vm---preliminary-steps)
   - [VPN config](#vpn-config-1)
-- [Linux VM endpoint - Agent installation](#linux-vm-endpoint---agent-installation)
-- [Vast.ai VM - Connectivity & SSH credentials](#vastai-vm---connectivity--ssh-credentials)
+- [Endpoint VM - Agent installation](#linux-vm-endpoint---agent-installation)
+- [Connectivity & SSH credentials](#connectivity--ssh-credentials)
 - [Tailscale admin panel - Restrict access](#tailscale-admin-panel---restrict-access)
-- [Linux VM endpoint - Restrict the UFW rules](#linux-vm-endpoint---restrict-the-ufw-rules)
+- [Endpoint VM - Restrict the UFW rules](#linux-vm-endpoint---restrict-the-ufw-rules)
 - [Overall execution](#overall-execution)
 
 
-## _Linux VM endpoint_ - Preliminary steps
+## _Endpoint VM_ - Preliminary steps
 _To execute at the first usage._
 
 ### VPN config
@@ -28,14 +28,14 @@ _To execute at the first usage._
     tailscale status
     tailscale ip -4
     ```
-  and take note of the IP address (100.x.y.z) (in my case, **100.82.104.108**).
+  and take note of the IP address (100.x.y.z) (in my case, **100.69.24.12**).
 
 ### SSH setup
 - Install OpenSSH-Server and run it:
   ```bash
   sudo apt install openssh-server -y
-  sudo systemctl enable sshd
-  sudo systemctl start sshd
+  sudo systemctl enable ssh
+  sudo systemctl start ssh
   ```
 - Check if it's active:
   ```bash
@@ -44,8 +44,6 @@ _To execute at the first usage._
 - Check the current firewall rules before changing them:
   ```ps
   sudo apt install ufw
-  sudo systemctl enable ssh
-  sudo systemctl start ssh
   sudo ufw enable
   sudo ufw start
   sudo ufw allow 22/tcp
@@ -56,8 +54,8 @@ _To execute at the first usage._
   SSH currently listens on all interfaces, and the existing UFW rules allow TCP/22 from anywhere over both IPv4 and IPv6.
 
 
-## _Vast.ai VM_ - Preliminary steps
-_To execute every time you build a new Vast.ai VM._
+## _Framework Host_ - Preliminary steps
+_To execute every time you build a new framework host._
 
 ### VPN config
 - Install and run Tailscale:
@@ -77,16 +75,16 @@ _To execute every time you build a new Vast.ai VM._
     tailscale status
     tailscale ip -4
     ```
-- Update the `.env` file adding the agent IP address and a custom approval token:
+- Update the framework `.env` file with its Tailscale address and a custom approval token. The API is bound only to the specified host interface:
     ```
-    AGENT_IP=100.82.104.108
+    FRAMEWORK_BIND_IP=<FRAMEWORK_TAILSCALE_IP>
     APPROVAL_TOKEN=<APPROVAL_TOKEN>
     ```
 
-## _Linux VM endpoint_ - Agent installation
-Python service that exposes only preset operations (in this moment only `block_ip` is supported), not a remote shell.
+## _Endpoint VM_ - Agent installation
+The endpoint runs a pull agent that opens outbound connections to the framework API.
 
-- Create a `containment_agent` directory and `agent.py`, `firewall.py`, `requirements.txt`, then:
+- Create a `containment_agent` directory, `agent.py` and `firewall.py`, then:
   ```bash
   mv agent.py firewall.py requirements.txt containment_agent
   sudo apt update
@@ -94,8 +92,6 @@ Python service that exposes only preset operations (in this moment only `block_i
   sudo install -d -m 0750 /opt/containment-agent
   sudo cp -r ~/containment_agent/. /opt/containment-agent/
   sudo python3 -m venv /opt/containment-agent/.venv
-  sudo /opt/containment-agent/.venv/bin/pip install \
-    -r /opt/containment-agent/requirements.txt
   ```
 
 - Create `/etc/containment-agent.env` with mode `0600`, owned by root:
@@ -105,31 +101,33 @@ Python service that exposes only preset operations (in this moment only `block_i
   Type: 
   ```text
   AGENT_CREDENTIAL_FILE=/etc/containment-agent.credential
-  AGENT_BIND_IP=100.82.104.108
-  ACR_PROTECTED_IPS=<FRAMEWORK_TAILSCALE_IP>,100.82.104.108
+  FRAMEWORK_URL=http://<FRAMEWORK_TAILSCALE_IP>:8000
+  ACR_PROTECTED_IPS=<FRAMEWORK_TAILSCALE_IP>,100.69.24.12
   ```
   Then close and:
   ```bash
   sudo chmod 0600 /etc/containment-agent.env
   ```
 
-- Install the credential helper and configure narrowly scoped sudo access. From the framework VM, stage the non-secret helper on the endpoint:
+
+
+## Connectivity & SSH credentials
+- On the framework, install the credential helper and configure narrowly scoped sudo access. From the framework VM, stage the non-secret helper on the endpoint:
   ```bash
   cd ~/AutonomousCyberResponseFramework
-  scp scripts/acr-install-agent-credential.py \
-    <LINUX_VM_USER>@100.82.104.108:/tmp/acr-install-agent-credential.py
-  ssh -t <LINUX_VM_USER>@100.82.104.108 \
-    'sudo install -o root -g root -m 0755 /tmp/acr-install-agent-credential.py /usr/local/sbin/acr-install-agent-credential && rm -f /tmp/acr-install-agent-credential.py'
+  scp scripts/acr-install-agent-credential.py <ENDPOINT_USER>@100.69.24.12:/tmp/acr-install-agent-credential.py
+  ssh -t <ENDPOINT_USER>@100.69.24.12 'sudo install -o root -g root -m 0755 /tmp/acr-install-agent-credential.py /usr/local/sbin/acr-install-agent-credential && rm -f /tmp/acr-install-agent-credential.py'
   ```
-  On the endpoint, create a sudoers rule with `sudo visudo -f /etc/sudoers.d/acr-install-agent-credential` and add this line, replacing `LINUX_VM_USER` with the SSH username:
+
+- On the endpoint, create a sudoers rule with `sudo visudo -f /etc/sudoers.d/acr-install-agent-credential` and add this line, replacing `ENDPOINT_USER` with the SSH username:
   ```sudoers
-  LINUX_VM_USER ALL=(root) NOPASSWD: /usr/local/sbin/acr-install-agent-credential ""
+  <ENDPOINT_USER> ALL=(root) NOPASSWD: /usr/local/sbin/acr-install-agent-credential ""
   ```
   Then validate the rule:
   ```bash
   sudo chmod 0440 /etc/sudoers.d/acr-install-agent-credential
   sudo visudo -cf /etc/sudoers.d/acr-install-agent-credential
-  sudo -l -U <LINUX_VM_USER>
+  sudo -l -U <ENDPOINT_USER>
   ```
   The helper accepts only a 64-character hexadecimal credential on standard input and writes it atomically to `/etc/containment-agent.credential` with owner `root:root` and mode `0600`. The sudoers entry permits only this helper with no arguments; do not grant passwordless access to a shell, `sudo`, or arbitrary file-install commands.
 
@@ -138,14 +136,14 @@ Python service that exposes only preset operations (in this moment only `block_i
   [Unit]
   Description=Linux Containment Agent
   After=network-online.target tailscaled.service
-  Wants=network-online.target
+  Wants=network-online.target tailscaled.service
 
   [Service]
   Type=simple
   User=root
   WorkingDirectory=/opt/containment-agent
   EnvironmentFile=/etc/containment-agent.env
-  ExecStart=/opt/containment-agent/.venv/bin/uvicorn agent:app --app-dir /opt/containment-agent --host 100.82.104.108 --port 8787
+  ExecStart=/opt/containment-agent/.venv/bin/python /opt/containment-agent/agent.py
   Restart=on-failure
   NoNewPrivileges=true
   CapabilityBoundingSet=CAP_NET_ADMIN
@@ -164,66 +162,72 @@ Python service that exposes only preset operations (in this moment only `block_i
   sudo systemctl enable --now containment-agent
   sudo systemctl status containment-agent
   ```
-
-
-## _Vast.ai VM_ - Connectivity & SSH credentials
-- Check the HTTP connectivity:
+  
+- From the endpoint VM, check the HTTP connectivity:
   ```ps
-  curl --connect-timeout 5 http://100.82.104.108:8787/health
+  curl --connect-timeout 5 http://<FRAMEWORK_TAILSCALE_IP>:8000/health
   ```
-  The expected reply is:
-  ```json
-  {"status":"ok","mode":"enforcing","actions":["block_ip"]}
-  ```
-- Check the SSH connection:
+  The expected reply is `{"status":"ok"}`. This check is unauthenticated (the command-polling and result endpoints require the provisioned agent credential).
+- From the framework host, check the SSH connection:
   ```ps
-  ssh <LINUX_VM_USER>@100.82.104.108
+  ssh <ENDPOINT_USER>@100.69.24.12
   ```
-- If you don't have a SSH public key (`ls -l ~/.ssh/id_ed25519*`):
-  ```ps
-  ssh-keygen -t ed25519 -a 64 -f ~/.ssh/id_ed25519
-  ssh-copy-id -i ~/.ssh/id_ed25519.pub kali@100.82.104.108
-  ```
-- Generate a unique 256-bit agent credential and install it on the framework host and endpoint:
-  ```bash
-  cd ~/AutonomousCyberResponseFramework
-  chmod +x scripts/provision_containment_agent_credential.sh
-  AGENT_IP=100.82.104.108 \
-  AGENT_SSH_TARGET=<LINUX_VM_USER>@100.82.104.108 \
-    scripts/provision_containment_agent_credential.sh
-  ```
-  The credential is stored locally under `.agent-credentials/` with restrictive permissions and on the endpoint at `/etc/containment-agent.credential` with owner `root` and mode `0600`. The script reuses the existing credential on subsequent runs and invokes only the restricted root helper over SSH.
+  - If you don't have a SSH public key (`ls -l ~/.ssh/id_ed25519*`):
+    ```ps
+    ssh-keygen -t ed25519 -a 64 -f ~/.ssh/id_ed25519
+    ssh-copy-id -i ~/.ssh/id_ed25519.pub kali@100.69.24.12
+    ```
+  - Generate a unique 256-bit agent credential and install it on the framework host and endpoint:
+    ```bash
+    cd ~/AutonomousCyberResponseFramework
+    chmod +x scripts/provision_containment_agent_credential.sh
+    AGENT_IP=100.69.24.12 \
+    AGENT_SSH_TARGET=<ENDPOINT_USER>@100.69.24.12 \
+      scripts/provision_containment_agent_credential.sh
+    ```
+    The credential is stored locally under `.agent-credentials/` with restrictive permissions and on the endpoint at `/etc/containment-agent.credential` with owner `root` and mode `0600`. The script reuses the existing credential on subsequent runs and invokes only the restricted root helper over SSH.
 
   > **Restart the framework after provisioning so Docker Compose mounts the credential directory.**
 
 
 ## _Tailscale admin panel_ - Restrict access
-- In the admin console (https://console.tailscale.com/admin/acls/file), add a grant to the existing policy for the framework node to reach only SSH and the containment API on this endpoint:
+- In the admin console (https://console.tailscale.com/admin/acls/file), add grants so the framework can reach only SSH on the endpoint, and the endpoint can reach the framework API:
     ```json
     "grants": [
       {
         "src": ["<FRAMEWORK_TAILSCALE_IP>/32"],
-        "dst": ["100.82.104.108"],
-        "ip": ["tcp:22", "tcp:8787"]
+        "dst": ["100.69.24.12"],
+        "ip": ["tcp:22"]
+      },
+      {
+        "src": ["100.69.24.12/32"],
+        "dst": ["<FRAMEWORK_TAILSCALE_IP>"],
+        "ip": ["tcp:8000"]
       }
     ]
     ```
 
-## _Linux VM endpoint_ - Restrict the UFW rules
-- Allow TCP connections from the framework:
+## Restrict the UFW rules
+- On the framework host, allow the endpoint to reach the API:
   ```bash
   FRAMEWORK_TAILSCALE_IP="<FRAMEWORK_TAILSCALE_IP>"
-  AGENT_TAILSCALE_IP="100.82.104.108"
+  AGENT_TAILSCALE_IP="100.69.24.12"
+  sudo ufw allow in on tailscale0 proto tcp from "$AGENT_TAILSCALE_IP" to "$FRAMEWORK_TAILSCALE_IP" port 8000
+  ```
+- On the endpoint, allow SSH from the framework and outbound API polling:
+  ```bash
+  FRAMEWORK_TAILSCALE_IP="<FRAMEWORK_TAILSCALE_IP>"
+  AGENT_TAILSCALE_IP="100.69.24.12"
 
   sudo ufw allow in on tailscale0 proto tcp from "$FRAMEWORK_TAILSCALE_IP" to "$AGENT_TAILSCALE_IP" port 22
-  sudo ufw allow in on tailscale0 proto tcp from "$FRAMEWORK_TAILSCALE_IP" to "$AGENT_TAILSCALE_IP" port 8787
+  sudo ufw allow out on tailscale0 proto tcp from "$AGENT_TAILSCALE_IP" to "$FRAMEWORK_TAILSCALE_IP" port 8000
   sudo ufw status numbered
   ```
 - Inspect:
   ```bash
   sudo ufw status numbered
   ```
-- And delete only the old `22/tcp ALLOW IN Anywhere` and `22/tcp (v6) ALLOW IN Anywhere (v6)` entries, replacing the `N` (rule number):
+- Delete any old public inbound rules for SSH or the former agent port, replacing `N` with the specific rule number:
   ```bash
   sudo ufw delete N
   sudo ufw status numbered

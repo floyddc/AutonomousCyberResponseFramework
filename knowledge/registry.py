@@ -506,6 +506,110 @@ class IncidentRegistry:
 
             return cur.fetchone()
 
+    def queue_containment_command(
+        self,
+        incident_id: int,
+        action: Dict[str, Any],
+    ) -> str:
+        if (
+            not isinstance(action, dict)
+            or action.get("action") != "block_ip"
+            or action.get("requires_human_approval") is not False
+            or not isinstance(action.get("target"), str)
+            or not action["target"].strip()
+        ):
+            raise ValueError("Only validated, approved block_ip actions can be queued")
+
+        command_id = str(uuid.uuid4())
+        with _cursor(config.POSTGRES_OPERATIONAL_DB) as cur:
+            cur.execute(
+                """
+                INSERT INTO containment_commands (id, incident_id, action)
+                VALUES (%s, %s, %s)
+                """,
+                (command_id, incident_id, json.dumps(action)),
+            )
+        return command_id
+
+    def claim_containment_command(self) -> Optional[Dict[str, Any]]:
+        with _cursor(config.POSTGRES_OPERATIONAL_DB) as cur:
+            cur.execute(
+                """
+                WITH next_command AS (
+                    SELECT id
+                    FROM containment_commands
+                    WHERE status = 'pending'
+                       OR (
+                            status = 'claimed'
+                            AND lease_expires_at <= now()
+                       )
+                    ORDER BY created_at, id
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE containment_commands AS command
+                SET status = 'claimed',
+                    claimed_at = now(),
+                    lease_expires_at = now() + interval '30 seconds'
+                FROM next_command
+                WHERE command.id = next_command.id
+                RETURNING command.id::text AS command_id, command.action
+                """
+            )
+            return cur.fetchone()
+
+    def complete_containment_command(
+        self,
+        command_id: str,
+        result: Dict[str, Any],
+    ) -> bool:
+        with _cursor(config.POSTGRES_OPERATIONAL_DB) as cur:
+            cur.execute(
+                """
+                UPDATE containment_commands
+                SET status = 'completed',
+                    result = %s,
+                    completed_at = now(),
+                    lease_expires_at = NULL
+                WHERE id = %s
+                  AND status = 'claimed'
+                  AND action->>'action' = %s
+                  AND action->>'target' IS NOT DISTINCT FROM %s
+                """,
+                (
+                    json.dumps(result),
+                    command_id,
+                    result.get("action"),
+                    result.get("target"),
+                ),
+            )
+            return cur.rowcount == 1
+
+    def get_containment_command(self, command_id: str) -> Optional[Dict[str, Any]]:
+        with _cursor(config.POSTGRES_OPERATIONAL_DB) as cur:
+            cur.execute(
+                """
+                SELECT status, result
+                FROM containment_commands
+                WHERE id = %s
+                """,
+                (command_id,),
+            )
+            return cur.fetchone()
+
+    def timeout_containment_command(self, command_id: str) -> None:
+        with _cursor(config.POSTGRES_OPERATIONAL_DB) as cur:
+            cur.execute(
+                """
+                UPDATE containment_commands
+                SET status = 'timed_out',
+                    lease_expires_at = NULL
+                WHERE id = %s
+                  AND status IN ('pending', 'claimed')
+                """,
+                (command_id,),
+            )
+
     def get_status(self, incident_id: int) -> Optional[str]:
         incident = self.get_incident(incident_id)
 

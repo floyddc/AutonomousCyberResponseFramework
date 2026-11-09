@@ -1,5 +1,4 @@
 import logging
-import config
 from typing import Any, Dict, List, Optional
 from knowledge.registry import IncidentRegistry
 from .logging_agent import logging_agent
@@ -15,7 +14,7 @@ class ResponseLayer:
         executor: Optional[RemoteExecutor] = None,
     ):
         self.registry = registry or IncidentRegistry()
-        self.executor = executor or RemoteExecutor(agent_ip=config.AGENT_IP)
+        self.executor = executor or RemoteExecutor(registry=self.registry)
 
     def _execute_action(
         self, action: Dict[str, Any]
@@ -26,7 +25,7 @@ class ResponseLayer:
             return {**action_result, "outcome": "queued_for_analyst"}
 
         try:
-            remote_result = self.executor.execute(action)
+            remote_result = self.executor.execute(incident_id, action)
 
             if (
                 isinstance(remote_result, dict)

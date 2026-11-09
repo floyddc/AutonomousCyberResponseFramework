@@ -4,6 +4,7 @@ import logging
 import hmac
 import os
 import re
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional, Protocol
 from urllib.parse import urlsplit
@@ -34,6 +35,14 @@ class IncidentStore(Protocol):
         action_indexes: list[int],
     ) -> None: ...
 
+    def claim_containment_command(self) -> Optional[Dict[str, Any]]: ...
+
+    def complete_containment_command(
+        self,
+        command_id: str,
+        result: Dict[str, Any],
+    ) -> bool: ...
+
 
 def create_server(registry: IncidentStore, host: str, port: int) -> ThreadingHTTPServer:
     class AlertRequestHandler(BaseHTTPRequestHandler):
@@ -56,12 +65,49 @@ def create_server(registry: IncidentStore, host: str, port: int) -> ThreadingHTT
                 return False
             return True
 
+        def _authorize_agent(self) -> bool:
+            credential_file = os.environ.get(
+                "AGENT_CREDENTIAL_FILE",
+                "/run/acr-agent-credentials/credential",
+            )
+            try:
+                with open(credential_file, "r", encoding="ascii") as credential_stream:
+                    credential = credential_stream.read().strip()
+            except OSError:
+                self._send_json(503, {"error": "Containment-agent credential is not configured"})
+                return False
+            if not credential:
+                self._send_json(503, {"error": "Containment-agent credential is not configured"})
+                return False
+            authorization = self.headers.get("Authorization", "")
+            if not hmac.compare_digest(authorization, "Bearer " + credential):
+                self._send_json(401, {"error": "Unauthorized"})
+                return False
+            return True
+
         def do_GET(self) -> None:
             if self.path == "/health":
                 self._send_json(200, {"status": "ok"})
                 return
 
             path = urlsplit(self.path).path
+            if path == "/agent/v1/commands/next":
+                if not self._authorize_agent():
+                    return
+                try:
+                    command = registry.claim_containment_command()
+                except Exception:
+                    logger.exception("Unable to claim a containment command")
+                    self._send_json(500, {"error": "Containment command could not be claimed"})
+                    return
+                if command is None:
+                    self.send_response(204)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                self._send_json(200, command)
+                return
+
             approval_match = re.fullmatch(
                 r"/incidents/([1-9][0-9]*)/approval",
                 path,
@@ -118,6 +164,63 @@ def create_server(registry: IncidentStore, host: str, port: int) -> ThreadingHTT
 
         def do_POST(self) -> None:
             path = urlsplit(self.path).path
+            command_result_match = re.fullmatch(
+                r"/agent/v1/commands/([0-9a-fA-F-]{36})/result",
+                path,
+            )
+            if command_result_match:
+                if not self._authorize_agent():
+                    return
+                try:
+                    command_id = str(uuid.UUID(command_result_match.group(1)))
+                except ValueError:
+                    self._send_json(400, {"error": "Invalid command ID"})
+                    return
+
+                content_length = self.headers.get("Content-Length")
+                try:
+                    length = int(content_length) if content_length is not None else -1
+                except ValueError:
+                    self._send_json(400, {"error": "Invalid Content-Length"})
+                    return
+                if length <= 0:
+                    self._send_json(411, {"error": "A result body is required"})
+                    return
+                if length > 16_384:
+                    self._send_json(413, {"error": "Command result is too large"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(length))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    self._send_json(400, {"error": "Result body must be valid JSON"})
+                    return
+                result = payload.get("result") if isinstance(payload, dict) else None
+                if (
+                    not isinstance(result, dict)
+                    or result.get("action") != "block_ip"
+                    or not isinstance(result.get("target"), str)
+                    or not result["target"].strip()
+                    or (result.get("status"), result.get("outcome"))
+                    not in {("ok", "executed"), ("error", "failed")}
+                ):
+                    self._send_json(400, {"error": "Invalid containment command result"})
+                    return
+
+                try:
+                    completed = registry.complete_containment_command(
+                        command_id,
+                        result,
+                    )
+                except Exception:
+                    logger.exception("Unable to record containment command result")
+                    self._send_json(500, {"error": "Command result could not be recorded"})
+                    return
+                if not completed:
+                    self._send_json(409, {"error": "Command is unknown, expired, or mismatched"})
+                    return
+                self._send_json(202, {"command_id": command_id, "status": "completed"})
+                return
+
             approval_match = re.fullmatch(r"/incidents/([1-9][0-9]*)/approve", path)
             if approval_match:
                 self._approve_incident(int(approval_match.group(1)))
