@@ -1,6 +1,12 @@
 {
   "severity_order": ["low", "medium", "high", "critical"],
   "require_human_approval_above_severity": "high",
+  "minimum_confidence_for_auto_by_severity": {
+    "low": 0.70,
+    "medium": 0.80,
+    "high": 0.90,
+    "critical": 0.95
+  },
   "blocked_actions": [],
   "max_actions_per_plan": 5
 }

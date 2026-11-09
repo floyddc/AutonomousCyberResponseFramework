@@ -76,8 +76,16 @@ class TriageAgent:
             for field in ("summary", "description", "category", "severity"):
                 if not isinstance(data.get(field), str) or not data[field].strip():
                     raise ValueError(f"LLM triage response has no valid {field!r}")
+            confidence = data.get("confidence")
+            if (
+                isinstance(confidence, bool)
+                or not isinstance(confidence, (int, float))
+                or not 0 <= confidence <= 1
+            ):
+                raise ValueError("LLM triage response has no valid 'confidence'")
             if data.get("severity") not in config.VALID_SEVERITIES:
                 data["severity"] = self._heuristic_severity(raw_payload)
+                data["confidence"] = 0.0
             data["category"] = self._normalize_category(raw_payload, data["category"])
             return data
         except Exception:
@@ -96,7 +104,8 @@ class TriageAgent:
                 "summary": f"{source} alert",
                 "description": json.dumps(raw_payload, ensure_ascii=False),
                 "category": "unknown",
-                "severity": self._heuristic_severity(raw_payload)
+                "severity": self._heuristic_severity(raw_payload),
+                "confidence": 0.0,
             }
 
         self.registry.update_fields(
@@ -121,6 +130,7 @@ class TriageAgent:
                 "context_length": len(context or ""),
                 "raw_payload_length": len(json.dumps(raw_payload, ensure_ascii=False, default=str)),
                 "severity": result.get("severity"),
+                "confidence": result.get("confidence"),
                 "category": result.get("category")
             }
         )

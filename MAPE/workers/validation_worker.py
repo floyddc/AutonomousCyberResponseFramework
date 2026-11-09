@@ -44,12 +44,20 @@ class ValidationWorker(Worker):
         if not isinstance(action_plan.get("actions"), list): raise RuntimeError(f"Action-proposed event {event.event_id} has no valid actions list")
         severity = event.payload.get("severity")
         if severity not in config.VALID_SEVERITIES: raise RuntimeError(f"Action-proposed event {event.event_id} has an invalid severity: {severity!r}")
+        confidence = event.payload.get("confidence", 0.0)
+        if (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not 0 <= confidence <= 1
+        ):
+            raise RuntimeError(f"Action-proposed event {event.event_id} has an invalid confidence: {confidence!r}")
 
         # validation
         validation_response = self.validation_agent.validate(
             event.incident_id,
             action_plan,
             severity,
+            confidence=confidence,
             incident=incident,
         )
         if (not isinstance(validation_response, tuple) or len(validation_response) != 2): raise RuntimeError("ValidationAgent returned an invalid result")
@@ -79,6 +87,7 @@ class ValidationWorker(Worker):
             payload={
                 "action_plan": action_plan,
                 "severity": severity,
+                "confidence": confidence,
                 "validation": validation_result,
                 "approved_actions": approved_actions,
                 "requires_human_approval": requires_human_approval,

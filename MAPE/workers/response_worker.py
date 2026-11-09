@@ -31,7 +31,11 @@ class ResponseWorker(Worker):
         )
         self.response_layer = response_layer or ResponseLayer(registry=self.registry)
 
+
+    # BUSINESS LOGIC ----------------------------------------------------------------------------------------------------------------------------------------------------------
     def handle_event(self, event: Event) -> None:
+
+        # collect approved actions from the event payload
         actions = event.payload.get("approved_actions")
         if not isinstance(actions, list) or not actions:
             raise RuntimeError("Validated event has no approved actions")
@@ -54,6 +58,8 @@ class ResponseWorker(Worker):
             payload={"approved_actions": actions},
             correlation_id=event.correlation_id,
         )
+
+        # execute the approved actions using the response layer
         response = self.response_layer.execute(event.incident_id, actions)
         results = response.get("results")
         succeeded = (
@@ -65,6 +71,8 @@ class ResponseWorker(Worker):
             )
         )
         status = STATUS_RESPONDED if succeeded else STATUS_FAILED
+
+        # send the final status of the incident
         self.transition_incident(
             incident_id=event.incident_id,
             status=status,

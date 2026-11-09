@@ -38,6 +38,13 @@ class ActionPlannerWorker(Worker):
         if not isinstance(triage_result, dict): raise RuntimeError(f"Triaged event {event.event_id} has an invalid triage result")
         severity = triage_result.get("severity")
         if severity not in config.VALID_SEVERITIES: raise RuntimeError(f"Triaged event {event.event_id} has an invalid severity: {severity!r}")
+        confidence = triage_result.get("confidence", 0.0)
+        if (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not 0 <= confidence <= 1
+        ):
+            raise RuntimeError(f"Triaged event {event.event_id} has an invalid confidence: {confidence!r}")
 
         # planning
         action_plan = self.action_planner_agent.propose_action_plan(incident, context, incident_id=event.incident_id)
@@ -52,6 +59,7 @@ class ActionPlannerWorker(Worker):
                 "action_plan": action_plan,
                 "context": context,
                 "severity": severity,
+                "confidence": confidence,
                 "original_event_id": event.event_id,
             },
             correlation_id=event.correlation_id,

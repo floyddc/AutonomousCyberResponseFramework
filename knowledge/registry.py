@@ -260,6 +260,8 @@ class IncidentRegistry:
         return {
             "incident_id": incident_id,
             "severity": payload.get("severity"),
+            "confidence": payload.get("confidence"),
+            "validation": payload.get("validation"),
             "approved_actions": actions,
         }
 

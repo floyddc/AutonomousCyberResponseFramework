@@ -59,8 +59,9 @@ TRIAGE_RESPONSE_SCHEMA = {
         "description": {"type": "string"},
         "category": {"type": "string"},
         "severity": {"type": "string", "enum": list(VALID_SEVERITIES)},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
-    "required": ["summary", "description", "category", "severity"],
+    "required": ["summary", "description", "category", "severity", "confidence"],
 }
 TRIAGE_SYSTEM_PROMPT = (
     "You are the AI Triage agent in a cyber-response system. "
@@ -76,9 +77,13 @@ TRIAGE_SYSTEM_PROMPT = (
     "because an alert contains an email address or domain. "
     "Do not invent hosts, users, actions, or MITRE techniques. If evidence "
     "does not support a specific tactic, use 'unknown'. "
+    "Estimate confidence from the directness, specificity, and consistency "
+    "of evidence in the raw alert; it is a 0-to-1 estimate, not a calibrated "
+    "probability. Be conservative when the alert is ambiguous or incomplete. "
     "Return only a JSON object with non-empty string fields "
-    "\"summary\", \"description\", and \"category\", and \"severity\" set "
-    "to one of: low, medium, high, critical. No prose or markdown."
+    "\"summary\", \"description\", and \"category\", \"severity\" set "
+    "to one of: low, medium, high, critical, and numeric \"confidence\" "
+    "between 0 and 1. No prose or markdown."
 )
 
 # PLANNER (GPU MODEL) ----------------------------------------------------------------------------------------------------------------------------------------------------------     

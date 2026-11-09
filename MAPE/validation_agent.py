@@ -2,6 +2,7 @@ import glob
 import ipaddress
 import json
 import logging
+import math
 import os
 import re
 from pathlib import PurePosixPath, PureWindowsPath
@@ -9,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 import config
 from knowledge.registry import IncidentRegistry
+from .confidence_policy import requires_human_approval as confidence_requires_human_approval
 from .logging_agent import logging_agent
 
 logger = logging.getLogger(__name__)
@@ -246,6 +248,7 @@ class ValidationAgent:
         incident_id: int,
         action_plan: Dict[str, Any],
         severity: Optional[str],
+        confidence: Any = None,
         incident: Optional[Dict[str, Any]] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         with logging_agent.track("validation_agent", "validate", incident_id=incident_id):
@@ -257,6 +260,7 @@ class ValidationAgent:
             blocked_actions = policies.get("blocked_actions", [])
             max_actions = policies.get("max_actions_per_plan", 5)
             approval_ceiling = policies.get("require_human_approval_above_severity", "high")
+            confidence_thresholds = policies.get("minimum_confidence_for_auto_by_severity")
 
             reasons: List[str] = []
             approved: List[Dict[str, Any]] = []
@@ -270,6 +274,21 @@ class ValidationAgent:
                 reasons.append(f"invalid incident severity: {severity!r}")
             if approval_ceiling not in severity_order:
                 raise ValueError("Policy human-approval severity is not in severity_order")
+            if (
+                not isinstance(confidence_thresholds, dict)
+                or set(confidence_thresholds) != set(severity_order)
+                or any(
+                    isinstance(threshold, bool)
+                    or not isinstance(threshold, (int, float))
+                    or not 0 <= threshold <= 1
+                    or not math.isfinite(threshold)
+                    for threshold in confidence_thresholds.values()
+                )
+            ):
+                raise ValueError(
+                    "Policy minimum_confidence_for_auto_by_severity must define "
+                    "a threshold between 0 and 1 for every severity"
+                )
             if isinstance(max_actions, bool) or not isinstance(max_actions, int) or max_actions < 1:
                 raise ValueError("Policy max_actions_per_plan must be a positive integer")
             if (
@@ -292,8 +311,13 @@ class ValidationAgent:
                 reasons.append(f"plan exceeds max_actions_per_plan ({max_actions})")
 
             severity_rank = severity_order.index(severity) if severity in severity_order else -1
-            ceiling_rank = severity_order.index(approval_ceiling)
-            requires_human_approval = severity_rank < 0 or severity_rank >= ceiling_rank
+            requires_human_approval = confidence_requires_human_approval(
+                severity,
+                confidence,
+                severity_order,
+                approval_ceiling,
+                confidence_thresholds,
+            )
             seen_actions = set()
 
             for action_index, action in enumerate(actions):
@@ -420,6 +444,12 @@ class ValidationAgent:
                 "approved_actions": approved,
                 "reasons": reasons,
                 "requires_human_approval": requires_human_approval,
+                "confidence": confidence,
+                "minimum_confidence_for_auto": (
+                    confidence_thresholds.get(severity)
+                    if severity in confidence_thresholds
+                    else None
+                ),
             }
 
             self.registry.log_action(
