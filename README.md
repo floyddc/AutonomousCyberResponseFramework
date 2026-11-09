@@ -60,7 +60,7 @@ curl -fsSL https://ollama.com/install.sh | sh
     ```
 - Make the script executable:
     ```bash
-    mv setup_VastAi.sh /root
+    mv scripts/setup_VastAi.sh /root
     cd 
     chmod +x setup_VastAi.sh
     ./setup_VastAi.sh
@@ -92,10 +92,12 @@ docker exec -it python-app python -m postgres.seed_knowledge_base
 The index is stored in `knowledge/indices/`
 - **First run:**
   ```powershell
+  cd AutonomousCyberResponseFramework
   docker compose run --rm --no-deps python python -m RAG.build_index --reset
   ```
 - Then, periodically:
   ```powershell
+  cd AutonomousCyberResponseFramework
   docker compose run --rm --no-deps python python -m RAG.build_index
   ```
 
