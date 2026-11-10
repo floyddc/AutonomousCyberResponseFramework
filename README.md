@@ -82,7 +82,7 @@ And wait for the pipeline warmup to complete (see logs with `docker logs python-
 - Check it:
   ```powershell
   cd AutonomousCyberResponseFramework
-  docker compose exec postgres-1 patronictl -c /etc/patroni.yml list
+  docker compose exec postgres-1 patronictl -c /tmp/patroni.yml list
   ```
 
 ### Dataset download
