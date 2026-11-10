@@ -4,6 +4,9 @@ import psycopg2.extras
 import config
 
 def connect(dbname: str):
+    if not config.POSTGRES_PASSWORD:
+        raise RuntimeError("POSTGRES_PASSWORD must be set")
+
     return psycopg2.connect(
         host=config.POSTGRES_HOST,
         port=config.POSTGRES_PORT,

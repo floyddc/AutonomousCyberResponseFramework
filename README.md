@@ -56,6 +56,8 @@ curl -fsSL https://ollama.com/install.sh | sh
     cd AutonomousCyberResponseFramework
     echo "HF_TOKEN=<HF_TOKEN>
     FRAMEWORK_BIND_IP=<FRAMEWORK_TAILSCALE_IP>
+    POSTGRES_PASSWORD=<DB_PASSWORD_1>
+    POSTGRES_REPLICATION_PASSWORD=<DB_PASSWORD_2>
     APPROVAL_TOKEN=approval-test" > .env
     ```
 - Make the script executable:
@@ -75,6 +77,14 @@ And wait for the pipeline warmup to complete (see logs with `docker logs python-
 
 
 ## Other Terminal
+
+### Postgres cluster membership
+- Check it:
+  ```powershell
+  cd AutonomousCyberResponseFramework
+  docker compose exec postgres-1 patronictl -c /etc/patroni.yml list
+  ```
+
 ### Dataset download
 All files are stored in `knowledge/base/` and divided into different folders.
 ```powershell
