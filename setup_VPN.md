@@ -126,22 +126,24 @@ The endpoint runs a pull agent that opens outbound connections to the framework 
 
 
 ## Connectivity & SSH credentials
+> **Replace `kali` with your `<ENDPOINT_USER>`**
+
 - On the framework, install the credential helper and configure narrowly scoped sudo access. From the framework VM, stage the non-secret helper on the endpoint:
   ```bash
   cd ~/AutonomousCyberResponseFramework
-  scp scripts/acr-install-agent-credential.py <ENDPOINT_USER>@100.126.14.83:/tmp/acr-install-agent-credential.py
-  ssh -t <ENDPOINT_USER>@100.126.14.83 'sudo install -o root -g root -m 0755 /tmp/acr-install-agent-credential.py /usr/local/sbin/acr-install-agent-credential && rm -f /tmp/acr-install-agent-credential.py'
+  scp scripts/acr-install-agent-credential.py kali@100.126.14.83:/tmp/acr-install-agent-credential.py
+  ssh -t kali@100.126.14.83 'sudo install -o root -g root -m 0755 /tmp/acr-install-agent-credential.py /usr/local/sbin/acr-install-agent-credential && rm -f /tmp/acr-install-agent-credential.py'
   ```
 
 - On the endpoint, create a sudoers rule with `sudo visudo -f /etc/sudoers.d/acr-install-agent-credential` and add this line, replacing `ENDPOINT_USER` with the SSH username:
   ```sudoers
-  <ENDPOINT_USER> ALL=(root) NOPASSWD: /usr/local/sbin/acr-install-agent-credential ""
+  kali ALL=(root) NOPASSWD: /usr/local/sbin/acr-install-agent-credential ""
   ```
   Then validate the rule:
   ```bash
   sudo chmod 0440 /etc/sudoers.d/acr-install-agent-credential
   sudo visudo -cf /etc/sudoers.d/acr-install-agent-credential
-  sudo -l -U <ENDPOINT_USER>
+  sudo -l -U kali
   ```
   The helper accepts only a 64-character hexadecimal credential on standard input and writes it atomically to `/etc/containment-agent.credential` with owner `root:root` and mode `0600`. The sudoers entry permits only this helper with no arguments; do not grant passwordless access to a shell, `sudo`, or arbitrary file-install commands.
 
@@ -191,7 +193,7 @@ The endpoint runs a pull agent that opens outbound connections to the framework 
 
 - Check if SSH works without asking the passphrase:
   ```ps
-  ssh <ENDPOINT_USER>@100.126.14.83
+  ssh kali@100.126.14.83
   ```
 
 - In the end, generate a unique 256-bit agent credential and install it on the framework host and endpoint:
@@ -199,7 +201,7 @@ The endpoint runs a pull agent that opens outbound connections to the framework 
     cd ~/AutonomousCyberResponseFramework
     chmod +x scripts/provision_containment_agent_credential.sh
     AGENT_IP=100.126.14.83 \
-    AGENT_SSH_TARGET=<ENDPOINT_USER>@100.126.14.83
+    AGENT_SSH_TARGET=kali@100.126.14.83
     scripts/provision_containment_agent_credential.sh
     ```
     The credential is stored locally under `.agent-credentials/` with restrictive permissions and on the endpoint at `/etc/containment-agent.credential` with owner `root` and mode `0600`. The script reuses the existing credential on subsequent runs and invokes only the restricted root helper over SSH.
@@ -256,12 +258,12 @@ The endpoint runs a pull agent that opens outbound connections to the framework 
 
   - If the incident is awaiting approval, inspect the validated choices:
     ```powershell
-    curl http://localhost:8000/incidents/<INCIDENT_ID>/approval -H "Authorization: Bearer <APPROVAL_TOKEN>"
+    curl http://localhost:8000/incidents/<INCIDENT_ID>/approval -H "Authorization: Bearer approval-test"
     ```
 
   - Approve **only the index of the `block_ip` action** from that response:
 
       ```powershell
-      curl -X POST http://localhost:8000/incidents/<INCIDENT_ID>/approve -H "Authorization: Bearer <APPROVAL_TOKEN>" -H "Content-Type: application/json" -d "{\"approved_by\":\"diego\",\"action_indexes\":[<BLOCK_IP_ACTION_INDEX>]}"
+      curl -X POST http://localhost:8000/incidents/<INCIDENT_ID>/approve -H "Authorization: Bearer approval-test" -H "Content-Type: application/json" -d "{\"approved_by\":\"diego\",\"action_indexes\":[<BLOCK_IP_ACTION_INDEX>]}"
       ```
       The IP will be blocked on the Linux VM for one hour. Check `GET /incidents/<INCIDENT_ID>` until it reaches `responded` or `failed`, and inspect the agent's systemd journal and `sudo nft list table inet acr` to verify the result.
