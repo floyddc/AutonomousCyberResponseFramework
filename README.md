@@ -73,6 +73,10 @@ curl -fsSL https://ollama.com/install.sh | sh
     docker compose build
     docker compose up
     ```
+      - If one of Postgre replica set is unhealthy, reinitialize it:
+        ```bash
+        docker compose exec postgres-<LEADER_NUMBER> patronictl -c /tmp/patroni.yml reinit acr-postgres postgres-<UNHEALTHY_NUMBER>
+        ```
 And wait for the pipeline warmup to complete (see logs with `docker logs python-app`).
 
 

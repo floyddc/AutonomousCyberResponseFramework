@@ -135,7 +135,11 @@ The endpoint runs a pull agent that opens outbound connections to the framework 
   ssh -t kali@100.126.14.83 'sudo install -o root -g root -m 0755 /tmp/acr-install-agent-credential.py /usr/local/sbin/acr-install-agent-credential && rm -f /tmp/acr-install-agent-credential.py'
   ```
 
-- On the endpoint, create a sudoers rule with `sudo visudo -f /etc/sudoers.d/acr-install-agent-credential` and add this line, replacing `ENDPOINT_USER` with the SSH username:
+- On the endpoint, create a sudoers rule:
+  ```ps
+  sudo visudo -f /etc/sudoers.d/acr-install-agent-credential
+  ```
+  and add this line, replacing `kali` with the endpoint:
   ```sudoers
   kali ALL=(root) NOPASSWD: /usr/local/sbin/acr-install-agent-credential ""
   ```

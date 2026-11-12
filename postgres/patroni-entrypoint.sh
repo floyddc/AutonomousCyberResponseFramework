@@ -3,8 +3,11 @@ set -eu
 
 mkdir -p /var/lib/postgresql/data
 chown postgres:postgres /var/lib/postgresql/data
+chmod 0700 /var/lib/postgresql/data
+chmod 1777 /tmp
 
 umask 077
+rm -f /tmp/patroni.yml
 /opt/patroni/bin/python - <<'PY'
 import os
 import yaml
